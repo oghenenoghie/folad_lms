@@ -66,6 +66,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Debug PING_TEST (non-sensitive, safe to print directly)
+        env:
+          PT: ${{ secrets.PING_TEST }}
+        run: |
+          if [ -z "$PT" ]; then
+            echo "PING_TEST: EMPTY"
+          else
+            echo "PING_TEST: $PT"
+          fi
+
       - name: Debug secret presence (prints only emptiness/length, never values)
         env:
           S_HOST: ${{ secrets.CPANEL_HOST }}
