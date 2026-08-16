@@ -17,7 +17,7 @@ php artisan serve
 
 ## Deployment
 
-Pushes to `main` run tests, then deploy to cPanel over SSH (`.github/workflows/deploy-api.yml`). The workflow expects these repository secrets:
+Pushes to `main` run tests, then deploy to cPanel over SSH (`.github/workflows/deploy-api.yml`). Shared cPanel hosting often has no Composer, so `vendor/` is built in CI (where Composer is available) and shipped to the server by rsync — the server itself never needs Composer installed. The workflow expects these repository secrets:
 
 | Secret | Purpose |
 |---|---|
@@ -27,7 +27,7 @@ Pushes to `main` run tests, then deploy to cPanel over SSH (`.github/workflows/d
 | `CPANEL_SSH_KEY` | Private key for a deploy keypair (public half added to cPanel's `~/.ssh/authorized_keys`) |
 | `CPANEL_DEPLOY_PATH` | Absolute path to the app on the server |
 
-`.env` lives on the server only and is never committed. The deploy script backs up the database before migrating, then runs `artisan down → migrate --force → cache → queue:restart → up`.
+`.env` lives on the server only and is never committed or synced over. The deploy job: builds `vendor/` in CI → `artisan down` (best-effort — fails harmlessly before the first deploy) → rsyncs the app to the server, excluding `.env`, `storage/app`, and other runtime-only paths → backs up the database → `migrate --force` → cache → `queue:restart` → `up`.
 
 Because shared cPanel hosting has no Supervisor, the queue worker runs via cron rather than a long-lived process:
 

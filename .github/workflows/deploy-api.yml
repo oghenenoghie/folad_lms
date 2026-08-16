@@ -66,7 +66,56 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy over SSH
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, dom, fileinfo, mysql, bcmath
+          coverage: none
+
+      # cPanel shared hosting has no Composer, so vendor/ is built here in CI
+      # and shipped to the server by rsync below, rather than running
+      # `composer install` over SSH.
+      - name: Install production dependencies
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+      - name: Enter maintenance mode
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.CPANEL_HOST }}
+          port: ${{ secrets.CPANEL_SSH_PORT }}
+          username: ${{ secrets.CPANEL_USER }}
+          key: ${{ secrets.CPANEL_SSH_KEY }}
+          # Fails harmlessly on the very first deploy, before vendor/ exists
+          # on the server and artisan can run at all.
+          script: cd ${{ secrets.CPANEL_DEPLOY_PATH }} && php artisan down || true
+
+      - name: Sync app to cPanel
+        uses: burnett01/rsync-deployments@7.0.2
+        with:
+          switches: >-
+            -avzr --delete
+            --exclude=.git --exclude=.github
+            --exclude=.env --exclude=.env.*
+            --exclude=node_modules --exclude=tests
+            --exclude=storage/app/**
+            --exclude=storage/logs/**
+            --exclude=storage/framework/cache/**
+            --exclude=storage/framework/sessions/**
+            --exclude=storage/framework/views/**
+            --exclude=storage/framework/testing/**
+            --exclude=bootstrap/cache/*.php
+            --exclude=database/database.sqlite
+          path: ./
+          remote_path: ${{ secrets.CPANEL_DEPLOY_PATH }}
+          remote_host: ${{ secrets.CPANEL_HOST }}
+          remote_port: ${{ secrets.CPANEL_SSH_PORT }}
+          remote_user: ${{ secrets.CPANEL_USER }}
+          remote_key: ${{ secrets.CPANEL_SSH_KEY }}
+
+      - name: Migrate, cache, and bring app back up
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.CPANEL_HOST }}
@@ -76,12 +125,9 @@ jobs:
           script_stop: true
           script: |
             cd ${{ secrets.CPANEL_DEPLOY_PATH }}
-            php artisan down || true
             mkdir -p storage/backups
             export $(grep -E '^DB_(DATABASE|USERNAME|PASSWORD)=' .env | xargs)
             mysqldump -u"$DB_USERNAME" -p"$DB_PASSWORD" "$DB_DATABASE" > "storage/backups/pre-deploy-$(date +%Y%m%d%H%M%S).sql" || true
-            git pull origin main
-            composer install --no-dev --optimize-autoloader
             php artisan migrate --force
             php artisan config:cache
             php artisan route:cache
