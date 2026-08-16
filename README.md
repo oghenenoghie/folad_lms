@@ -1,6 +1,6 @@
 # Folad LMS
 
-A multi-tenant school management platform for Nigerian schools. Laravel 13 REST API (MySQL) deployed to cPanel over SSH, paired with a Next.js frontend on Vercel talking to the API over Sanctum.
+A multi-tenant school management platform for Nigerian schools. Laravel 13 REST API (MySQL) deployed to cPanel, paired with a Next.js frontend on Vercel talking to the API over Sanctum.
 
 See [`.claude/skills/school-management-system/SKILL.md`](.claude/skills/school-management-system/SKILL.md) for the full domain model, stack, engineering conventions, and roadmap.
 
@@ -17,19 +17,33 @@ php artisan serve
 
 ## Deployment
 
-Pushes to `main` run tests, then deploy to cPanel over SSH (`.github/workflows/deploy-api.yml`). Shared cPanel hosting often has no Composer, so `vendor/` is built in CI (where Composer is available) and shipped to the server by rsync — the server itself never needs Composer installed. The workflow expects these repository secrets:
+The cPanel host's firewall silently drops inbound SSH connections from GitHub Actions' cloud IPs (confirmed: connections to both port 22 and a custom port time out even with a valid key), so deployment can't be push-based. Instead it's **pull-based**: the server fetches from GitHub itself over an outbound connection, which the firewall doesn't touch.
 
-| Secret | Purpose |
-|---|---|
-| `CPANEL_HOST` | SSH host for the cPanel account |
-| `CPANEL_SSH_PORT` | SSH port (cPanel is often non-standard) |
-| `CPANEL_USER` | SSH username |
-| `CPANEL_SSH_KEY` | Private key for a deploy keypair (public half added to cPanel's `~/.ssh/authorized_keys`) |
-| `CPANEL_DEPLOY_PATH` | Absolute path to the app on the server |
+Pushes to `main` run tests, then (`.github/workflows/deploy-api.yml`, `publish-deploy-branch` job) build `vendor/` in CI — the server has no Composer either — and force-push a self-contained snapshot (app code + `vendor/`, no history) to a `deploy` branch. A cron job on the server pulls that branch and runs the Laravel deploy steps locally.
 
-`.env` lives on the server only and is never committed or synced over. The deploy job: builds `vendor/` in CI → `artisan down` (best-effort — fails harmlessly before the first deploy) → rsyncs the app to the server, excluding `.env`, `storage/app`, and other runtime-only paths → backs up the database → `migrate --force` → cache → `queue:restart` → `up`.
+**One-time server setup** (via SSH, from a connection that isn't firewalled — i.e. your own):
 
-Because shared cPanel hosting has no Supervisor, the queue worker runs via cron rather than a long-lived process:
+```bash
+cd /home/headpock_folad/public_html/foladschool.com.ng/folad_lms   # wherever the app lives
+
+# Point the existing clone at the deploy branch instead of main
+git fetch origin deploy
+git checkout -B deploy origin/deploy
+
+cp .env.example .env   # if not already present; then fill in real DB_* values, APP_KEY, etc.
+php artisan key:generate
+php artisan storage:link
+```
+
+Then add a cron job (cPanel → Cron Jobs) that keeps it in sync:
+
+```
+*/5 * * * * cd /home/headpock_folad/public_html/foladschool.com.ng/folad_lms && git fetch origin deploy -q && git reset --hard origin/deploy -q && php artisan migrate --force && php artisan config:cache && php artisan route:cache && php artisan view:cache && php artisan queue:restart >> storage/logs/deploy.log 2>&1
+```
+
+`git reset --hard` is safe here because the `deploy` branch is a generated artifact (force-pushed fresh each time, not a real history) — the server's working copy is meant to exactly mirror it. `.env` isn't part of that branch (it's gitignored), so it survives the reset untouched.
+
+Because shared cPanel hosting has no Supervisor, the queue worker also runs via cron rather than a long-lived process:
 
 ```
 * * * * * cd <path> && php artisan schedule:run >> /dev/null 2>&1
