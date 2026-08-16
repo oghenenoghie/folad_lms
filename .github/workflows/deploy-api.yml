@@ -101,9 +101,9 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout --orphan deploy
+          git checkout --orphan cpanel-deploy
           git rm -rf --cached . > /dev/null
           git add -A
           git add -f vendor
           git commit -m "Deploy ${{ github.sha }}"
-          git push --force origin deploy
+          git push --force origin cpanel-deploy
