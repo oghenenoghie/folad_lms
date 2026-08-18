@@ -183,6 +183,14 @@ class StudentApiTest extends TestCase
         $this->getJson('/api/students')->assertUnauthorized();
     }
 
+    public function test_unauthenticated_plain_request_returns_401_not_a_redirect_crash(): void
+    {
+        // No Accept: application/json header — e.g. a bare browser hit. Without
+        // redirectGuestsTo(null) in bootstrap/app.php, this throws a
+        // RouteNotFoundException trying to build a nonexistent 'login' route.
+        $this->get('/api/students')->assertUnauthorized();
+    }
+
     public function test_school_admin_can_soft_delete_and_restore_a_student(): void
     {
         $school = School::create(['name' => 'School A', 'code' => 'school-a']);

@@ -16,6 +16,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
         $middleware->alias(['permissions.team' => SetPermissionsTeamId::class]);
+
+        // This is an API-only app with no 'login' route. Without this, the default
+        // Authenticate middleware tries to build one for any guest request that
+        // doesn't explicitly ask for JSON (e.g. a bare browser hit), and throws
+        // a 500 (RouteNotFoundException) instead of a clean 401.
+        $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
