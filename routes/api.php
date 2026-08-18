@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClassArmController;
 use App\Http\Controllers\Api\ClassLevelController;
 use App\Http\Controllers\Api\EnrollmentController;
@@ -8,8 +9,18 @@ use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\StudentController;
 use Illuminate\Support\Facades\Route;
 
+Route::post('login', [AuthController::class, 'login'])->middleware('throttle:6,1');
+
 Route::middleware(['auth:sanctum', 'permissions.team'])->group(function () {
-    Route::get('/user', fn () => request()->user());
+    Route::post('logout', [AuthController::class, 'logout']);
+
+    Route::get('/user', fn (\Illuminate\Http\Request $request) => [
+        'id'        => $request->user()->id,
+        'name'      => $request->user()->name,
+        'email'     => $request->user()->email,
+        'school_id' => $request->user()->school_id,
+        'roles'     => $request->user()->getRoleNames(),
+    ]);
 
     Route::apiResource('students', StudentController::class);
     Route::post('students/{student}/restore', [StudentController::class, 'restore'])->name('students.restore');
