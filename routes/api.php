@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ClassArmController;
 use App\Http\Controllers\Api\ClassLevelController;
 use App\Http\Controllers\Api\EnrollmentController;
 use App\Http\Controllers\Api\GuardianController;
+use App\Http\Controllers\Api\SchoolController;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\StudentController;
 use Illuminate\Support\Facades\Route;
@@ -37,4 +38,7 @@ Route::middleware(['auth:sanctum', 'permissions.team'])->group(function () {
     Route::apiResource('class-arms', ClassArmController::class);
 
     Route::apiResource('enrollments', EnrollmentController::class);
+
+    Route::apiResource('schools', SchoolController::class);
+    Route::post('schools/{school}/restore', [SchoolController::class, 'restore'])->name('schools.restore');
 });
