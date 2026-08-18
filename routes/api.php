@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\ClassArmController;
 use App\Http\Controllers\Api\ClassLevelController;
+use App\Http\Controllers\Api\EnrollmentController;
 use App\Http\Controllers\Api\GuardianController;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\StudentController;
@@ -23,4 +24,6 @@ Route::middleware(['auth:sanctum', 'permissions.team'])->group(function () {
 
     Route::apiResource('class-levels', ClassLevelController::class);
     Route::apiResource('class-arms', ClassArmController::class);
+
+    Route::apiResource('enrollments', EnrollmentController::class);
 });
