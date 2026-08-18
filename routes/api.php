@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClassArmController;
 use App\Http\Controllers\Api\ClassLevelController;
 use App\Http\Controllers\Api\EnrollmentController;
+use App\Http\Controllers\Api\GradingScaleController;
 use App\Http\Controllers\Api\GuardianController;
 use App\Http\Controllers\Api\SchoolController;
 use App\Http\Controllers\Api\StaffController;
@@ -50,4 +51,7 @@ Route::middleware(['auth:sanctum', 'permissions.team'])->group(function () {
 
     Route::apiResource('subjects', SubjectController::class);
     Route::put('subjects/{subject}/class-levels', [SubjectController::class, 'syncClassLevels'])->name('subjects.class-levels.sync');
+
+    Route::apiResource('grading-scales', GradingScaleController::class);
+    Route::put('grading-scales/{grading_scale}/bands', [GradingScaleController::class, 'syncBands'])->name('grading-scales.bands.sync');
 });
