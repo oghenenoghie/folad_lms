@@ -19,9 +19,9 @@ class ClassArm extends Model
     public function formTeacher(): BelongsTo { return $this->belongsTo(Staff::class, 'form_teacher_id'); }
     public function enrollments(): HasMany   { return $this->hasMany(Enrollment::class); }
 
-    /** "JSS 1A" */
+    /** "JSS 1A" — level.name + arm.name, no separator (per skill spec). */
     public function getFullNameAttribute(): string
     {
-        return trim(($this->classLevel?->name ?? '') . ' ' . $this->name);
+        return trim(($this->classLevel?->name ?? '') . $this->name);
     }
 }
