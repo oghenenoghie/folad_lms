@@ -17,4 +17,5 @@ class Enrollment extends Model
     public function classArm(): BelongsTo        { return $this->belongsTo(ClassArm::class); }
     public function academicSession(): BelongsTo { return $this->belongsTo(AcademicSession::class); }
     public function results(): HasMany           { return $this->hasMany(Result::class); }
+    public function attendances(): HasMany       { return $this->hasMany(Attendance::class); }
 }
