@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AcademicSessionController;
+use App\Http\Controllers\Api\AssessmentComponentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClassArmController;
 use App\Http\Controllers\Api\ClassLevelController;
@@ -54,4 +55,6 @@ Route::middleware(['auth:sanctum', 'permissions.team'])->group(function () {
 
     Route::apiResource('grading-scales', GradingScaleController::class);
     Route::put('grading-scales/{grading_scale}/bands', [GradingScaleController::class, 'syncBands'])->name('grading-scales.bands.sync');
+
+    Route::apiResource('assessment-components', AssessmentComponentController::class);
 });
