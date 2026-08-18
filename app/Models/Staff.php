@@ -28,6 +28,11 @@ class Staff extends Model
         return $this->hasMany(ClassArm::class, 'form_teacher_id');
     }
 
+    public function recordedResults(): HasMany
+    {
+        return $this->hasMany(Result::class, 'recorded_by');
+    }
+
     public function getFullNameAttribute(): string
     {
         return implode(' ', array_filter([$this->first_name, $this->middle_name, $this->last_name]));

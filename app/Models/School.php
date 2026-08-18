@@ -27,6 +27,9 @@ class School extends Model
     public function classArms(): HasMany        { return $this->hasMany(ClassArm::class); }
     public function subjects(): HasMany         { return $this->hasMany(Subject::class); }
     public function enrollments(): HasMany      { return $this->hasMany(Enrollment::class); }
+    public function gradingScales(): HasMany    { return $this->hasMany(GradingScale::class); }
+    public function assessmentComponents(): HasMany { return $this->hasMany(AssessmentComponent::class); }
+    public function results(): HasMany          { return $this->hasMany(Result::class); }
 
     public function currentSession(): ?AcademicSession
     {
