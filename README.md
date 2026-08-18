@@ -23,8 +23,10 @@ Pushes to `main` run tests, then (`.github/workflows/deploy-api.yml`, `publish-d
 
 **One-time server setup** (via SSH, from a connection that isn't firewalled — i.e. your own):
 
+> **Confirm the real document root first.** `foladschool.com.ng` is the account's primary domain, so its document root is `public_html/` directly — **not** `public_html/foladschool.com.ng/`. A checkout at `public_html/foladschool.com.ng/folad_lms` looks plausible but isn't served by anything; it's happened before (deploys silently landing there while the live site kept running old code). Verify in cPanel → Domains → Document Root, or just check which path shows up in `storage/logs/laravel.log` stack traces from an actual HTTP request.
+
 ```bash
-cd /home2/headpock/public_html/foladschool.com.ng/folad_lms   # wherever the app lives
+cd /home2/headpock/public_html/folad_lms   # wherever the app lives
 
 # Point the existing clone at the deploy branch instead of main
 git fetch origin cpanel-deploy
@@ -38,7 +40,7 @@ php artisan storage:link
 Then add a cron job (cPanel → Cron Jobs) that keeps it in sync:
 
 ```
-*/5 * * * * (cd /home2/headpock/public_html/foladschool.com.ng/folad_lms && git fetch origin cpanel-deploy -q && git reset --hard origin/cpanel-deploy -q && php artisan migrate --force && php artisan config:cache && php artisan route:cache && php artisan view:cache && php artisan queue:restart) >> /home2/headpock/public_html/foladschool.com.ng/folad_lms/storage/logs/deploy.log 2>&1
+*/5 * * * * (cd /home2/headpock/public_html/folad_lms && git fetch origin cpanel-deploy -q && git reset --hard origin/cpanel-deploy -q && php artisan migrate --force && php artisan config:cache && php artisan route:cache && php artisan view:cache && php artisan queue:restart) >> /home2/headpock/public_html/folad_lms/storage/logs/deploy.log 2>&1
 ```
 
 Two details that matter here and have bitten this deploy before:
@@ -51,6 +53,6 @@ Two details that matter here and have bitten this deploy before:
 Because shared cPanel hosting has no Supervisor, the queue worker also runs via cron rather than a long-lived process:
 
 ```
-* * * * * cd /home2/headpock/public_html/foladschool.com.ng/folad_lms && php artisan schedule:run >> /dev/null 2>&1
-* * * * * cd /home2/headpock/public_html/foladschool.com.ng/folad_lms && php artisan queue:work --stop-when-empty --max-time=55
+* * * * * cd /home2/headpock/public_html/folad_lms && php artisan schedule:run >> /dev/null 2>&1
+* * * * * cd /home2/headpock/public_html/folad_lms && php artisan queue:work --stop-when-empty --max-time=55
 ```
