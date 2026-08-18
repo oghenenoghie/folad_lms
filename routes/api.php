@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AcademicSessionController;
 use App\Http\Controllers\Api\AssessmentComponentController;
+use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClassArmController;
 use App\Http\Controllers\Api\ClassLevelController;
@@ -63,4 +64,13 @@ Route::middleware(['auth:sanctum', 'permissions.team'])->group(function () {
     // as the {result} id parameter on GET results/{result}.
     Route::get('results/report', [ResultController::class, 'report'])->name('results.report');
     Route::apiResource('results', ResultController::class);
+
+    // Static paths must come before {attendance}, same reasoning as results/report.
+    Route::post('attendances/bulk-mark', [AttendanceController::class, 'bulkMark'])->name('attendances.bulk-mark');
+    Route::get('attendances/summary', [AttendanceController::class, 'summary'])->name('attendances.summary');
+    Route::get('attendances', [AttendanceController::class, 'index'])->name('attendances.index');
+    Route::get('attendances/{attendance}', [AttendanceController::class, 'show'])->name('attendances.show');
+    Route::put('attendances/{attendance}', [AttendanceController::class, 'update'])->name('attendances.update');
+    Route::patch('attendances/{attendance}', [AttendanceController::class, 'update']);
+    Route::delete('attendances/{attendance}', [AttendanceController::class, 'destroy'])->name('attendances.destroy');
 });

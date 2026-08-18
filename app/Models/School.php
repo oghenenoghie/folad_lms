@@ -30,6 +30,7 @@ class School extends Model
     public function gradingScales(): HasMany    { return $this->hasMany(GradingScale::class); }
     public function assessmentComponents(): HasMany { return $this->hasMany(AssessmentComponent::class); }
     public function results(): HasMany          { return $this->hasMany(Result::class); }
+    public function attendances(): HasMany      { return $this->hasMany(Attendance::class); }
 
     public function currentSession(): ?AcademicSession
     {
