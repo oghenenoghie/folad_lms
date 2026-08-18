@@ -21,4 +21,9 @@ class ClassLevel extends Model
     {
         return $this->belongsToMany(Subject::class, 'class_subject')->withTimestamps();
     }
+
+    public function gradingScales(): HasMany
+    {
+        return $this->hasMany(GradingScale::class);
+    }
 }
