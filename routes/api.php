@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ClassLevelController;
 use App\Http\Controllers\Api\EnrollmentController;
 use App\Http\Controllers\Api\GradingScaleController;
 use App\Http\Controllers\Api\GuardianController;
+use App\Http\Controllers\Api\ResultController;
 use App\Http\Controllers\Api\SchoolController;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\StudentController;
@@ -57,4 +58,9 @@ Route::middleware(['auth:sanctum', 'permissions.team'])->group(function () {
     Route::put('grading-scales/{grading_scale}/bands', [GradingScaleController::class, 'syncBands'])->name('grading-scales.bands.sync');
 
     Route::apiResource('assessment-components', AssessmentComponentController::class);
+
+    // Must come before the apiResource below, or "report" would be swallowed
+    // as the {result} id parameter on GET results/{result}.
+    Route::get('results/report', [ResultController::class, 'report'])->name('results.report');
+    Route::apiResource('results', ResultController::class);
 });
