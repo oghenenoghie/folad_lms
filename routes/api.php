@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\GuardianController;
 use App\Http\Controllers\Api\SchoolController;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\StudentController;
+use App\Http\Controllers\Api\SubjectController;
 use App\Http\Controllers\Api\TermController;
 use Illuminate\Support\Facades\Route;
 
@@ -46,4 +47,7 @@ Route::middleware(['auth:sanctum', 'permissions.team'])->group(function () {
 
     Route::apiResource('academic-sessions', AcademicSessionController::class);
     Route::apiResource('terms', TermController::class);
+
+    Route::apiResource('subjects', SubjectController::class);
+    Route::put('subjects/{subject}/class-levels', [SubjectController::class, 'syncClassLevels'])->name('subjects.class-levels.sync');
 });
