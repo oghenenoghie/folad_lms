@@ -16,6 +16,10 @@ class Staff extends Model
 
     protected $guarded = [];
 
+    protected $casts = [
+        'employment_date' => 'date',
+    ];
+
     public function user(): BelongsTo { return $this->belongsTo(User::class); }
 
     /** Classes where this staff member is the form teacher. */
@@ -24,8 +28,18 @@ class Staff extends Model
         return $this->hasMany(ClassArm::class, 'form_teacher_id');
     }
 
+    public function recordedResults(): HasMany
+    {
+        return $this->hasMany(Result::class, 'recorded_by');
+    }
+
+    public function recordedAttendances(): HasMany
+    {
+        return $this->hasMany(Attendance::class, 'recorded_by');
+    }
+
     public function getFullNameAttribute(): string
     {
-        return trim("{$this->first_name} {$this->middle_name} {$this->last_name}");
+        return implode(' ', array_filter([$this->first_name, $this->middle_name, $this->last_name]));
     }
 }
