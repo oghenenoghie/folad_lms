@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Seeders\RoleSeeder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -11,6 +12,14 @@ class School extends Model
     use SoftDeletes;
 
     protected $guarded = [];
+
+    protected static function booted(): void
+    {
+        // Every school needs its own copy of the school-scoped roles
+        // (spatie teams keys each role row by school_id) — seed them here
+        // rather than relying on an admin to remember a manual step.
+        static::created(fn (School $school) => RoleSeeder::seedForSchool($school->id));
+    }
 
     protected $casts = [
         'settings'  => 'array',
