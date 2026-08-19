@@ -1,8 +1,77 @@
 # Folad LMS
 
-A multi-tenant school management platform for Nigerian schools. Laravel 13 REST API (MySQL) deployed to cPanel, paired with a Next.js frontend on Vercel talking to the API over Sanctum.
+A **multi-tenant school management platform** for Nigerian schools. This repository is the **Laravel 13 REST API** backend (MySQL, deployed to cPanel); the client is a separate **Next.js (App Router)** app on Vercel that talks to this API over Laravel Sanctum.
+
+Built as a product rather than a single-institution deployment — every core table carries a `school_id`, so one API can serve many schools with isolation enforced at the application layer.
+
+> **Organising idea:** the academic calendar is the spine. Enrolment, results, attendance, and fees all scope to a `school → academic_session → term`. Get that hierarchy right and everything else hangs off it cleanly.
 
 See [`.claude/skills/school-management-system/SKILL.md`](.claude/skills/school-management-system/SKILL.md) for the full domain model, stack, engineering conventions, and roadmap.
+
+## Status
+
+Core skeleton, auth, and enrolment are done, and so is assessment: schools, academic sessions/terms, class levels/arms, subjects, students, staff, guardians, and enrolments all have full CRUD APIs, plus grading scales, assessment components, results (including a computed report endpoint), and attendance. Finance (fee structures, invoices, payments), timetable & comms, and report-card generation are staged next (see [Roadmap](#roadmap)).
+
+## Stack
+
+| Layer            | Choice                                                                      |
+| ---------------- | --------------------------------------------------------------------------- |
+| API              | Laravel 13 (PHP 8.3+), REST, Sanctum auth                                   |
+| Database         | MySQL 8 (cPanel)                                                            |
+| Roles            | `spatie/laravel-permission`, with **teams = `school_id`** for per-school scoping |
+| Frontend         | Next.js App Router + TypeScript + Tailwind + shadcn/ui (separate repo)      |
+| API deploy       | GitHub Actions (test + build) → pull-based sync to cPanel (see [Deployment](#deployment)) |
+| Frontend deploy  | Vercel (push-to-deploy)                                                     |
+| Media            | Cloudinary or cPanel storage + `storage:link`                              |
+
+**Auth topology:** API at `api.<domain>`, app at `app.<domain>` on a shared apex so Sanctum stateful cookies work (`SANCTUM_STATEFUL_DOMAINS` + `SESSION_DOMAIN=.<domain>`). If a shared apex isn't available, fall back to bearer tokens.
+
+## Architecture
+
+### Multi-tenancy
+
+Every core table carries `school_id`. MySQL has no row-level security, so isolation is enforced in the application via an Eloquent **global scope** plus a `BelongsToSchool` trait. `super_admin` is the only role that bypasses the scope, and it does so explicitly. A tenant-scoped query that forgets `school_id` is treated as a data-leak bug, not a style issue.
+
+### Roles
+
+Seven roles, all school-scoped except `super_admin`. Authorization goes through Policies — never inline role checks scattered across controllers.
+
+| Role                        | Scope                                                          |
+| --------------------------- | ------------------------------------------------------------- |
+| `super_admin`               | Platform owner; crosses tenants (no `school_id` scope)        |
+| `school_admin`              | Full control within one school                                |
+| `teacher`                   | Own classes; records results and attendance                   |
+| `student`                   | Self-service — results, timetable, fees owed                  |
+| `guardian`                  | Read access to linked students                                 |
+| `accountant` / `bursar`     | Fees, invoices, payments                                       |
+| `head_teacher` / `principal`| Optional; approvals and cross-class reporting                 |
+
+### Core data model
+
+```
+schools (tenant root)
+  └── academic_sessions ("2025/2026", is_current)
+        └── terms (First/Second/Third, is_current)
+
+users (Laravel auth + school_id + phone; roles via spatie)
+  ├── staff        (staff_number, designation — teachers live here)
+  ├── students     (admission_number, dob, gender, status)
+  └── guardians    (relationship, occupation, contact)
+
+guardian_student   (pivot; many guardians ↔ many students, is_primary)
+
+class_levels (JSS 1 … SS 3, ordered)
+  └── class_arms   (JSS 1A, form_teacher → staff, capacity)
+
+subjects
+  └── class_subject (which subjects are taught at which level)
+
+enrollments (student ↔ class_arm ↔ academic_session — the key link)
+  ├── results     (grading_scales + assessment_components per subject/term)
+  └── attendances
+```
+
+Class structure is two-tier, matching Nigerian schools: a `class_level` ("JSS 1") holds one or more `class_arms` ("A", "Gold", "Diamond"), displayed as `level.name + arm.name` → "JSS 1A". A student's **current class is derived from their active enrolment** for the current session — it is never denormalised onto the student row.
 
 ## Local setup
 
@@ -10,10 +79,25 @@ See [`.claude/skills/school-management-system/SKILL.md`](.claude/skills/school-m
 composer install
 cp .env.example .env
 php artisan key:generate
-touch database/database.sqlite   # or point DB_* at a local MySQL instance
+touch database/database.sqlite   # or point DB_* in .env at a local MySQL instance
 php artisan migrate
 php artisan serve
 ```
+
+Frontend assets (if working on Blade/Vite-served views):
+
+```bash
+npm install
+npm run dev      # or: npm run build
+```
+
+## Testing
+
+```bash
+php artisan test        # or: ./vendor/bin/phpunit
+```
+
+Tests gate deployment — the CI `test` job must pass before the deploy-branch publish step runs.
 
 ## Deployment
 
@@ -56,3 +140,22 @@ Because shared cPanel hosting has no Supervisor, the queue worker also runs via 
 * * * * * cd /home2/headpock/public_html/folad_lms && php artisan schedule:run >> /dev/null 2>&1
 * * * * * cd /home2/headpock/public_html/folad_lms && php artisan queue:work --stop-when-empty --max-time=55
 ```
+
+**Backups:** the `migrate --force` step in the sync cron runs against a live database with no separate dump step today — schedule an independent daily `mysqldump` off-server before relying on this in production.
+
+## Conventions
+
+- **Money is integer minor units** (kobo as `bigint`, NGN exponent = 2) with a per-currency exponent lookup. Never floats or decimal-of-naira. Payment rows are append-only — reverse with a compensating entry, never UPDATE/DELETE.
+- **Effective-dated calendar.** Sessions and terms are dated rows with `is_current` flags. Never hardcode a year; results and fees pin to the session/term in force.
+- **Derive, don't denormalise.** Current class, term position, and outstanding balance are computed from source rows, not cached columns — until proven a real performance problem.
+- **Thin controllers.** Policies for authorization, Form Requests for validation, API Resources for output shape.
+- **Soft deletes** on `students`, `staff`, and `guardians` — records must be recoverable and auditable.
+- Student data is **sensitive PII (minors)**: strict auth, access logging on results/records, and no cross-tenant exposure in any endpoint.
+
+## Roadmap
+
+Core skeleton, auth, enrolment, assessment & results, and attendance (done) → finance (fee structures, invoices, payments) → timetable & comms → report-card generation.
+
+## License
+
+Not yet specified — add a `LICENSE` file before treating this as open source. Until then, all rights reserved.
