@@ -15,7 +15,10 @@ class ClassLevel extends Model
 
     protected $casts = ['rank' => 'integer'];
 
-    public function arms(): HasMany { return $this->hasMany(ClassArm::class); }
+    public function arms(): HasMany
+    {
+        return $this->hasMany(ClassArm::class);
+    }
 
     public function subjects(): BelongsToMany
     {
@@ -30,5 +33,10 @@ class ClassLevel extends Model
     public function feeStructures(): HasMany
     {
         return $this->hasMany(FeeStructure::class);
+    }
+
+    public function announcements(): HasMany
+    {
+        return $this->hasMany(Announcement::class);
     }
 }
