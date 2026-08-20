@@ -1,0 +1,109 @@
+name: Deploy API to cPanel
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: true
+          MYSQL_DATABASE: testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, dom, fileinfo, mysql, bcmath
+          coverage: none
+
+      - name: Copy .env
+        run: cp .env.example .env
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Generate app key
+        run: php artisan key:generate
+
+      - name: Configure test database
+        run: |
+          sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env
+          {
+            echo "DB_HOST=127.0.0.1"
+            echo "DB_PORT=3306"
+            echo "DB_DATABASE=testing"
+            echo "DB_USERNAME=root"
+            echo "DB_PASSWORD="
+          } >> .env
+
+      - name: Run migrations
+        run: php artisan migrate --force
+
+      - name: Run tests
+        run: php artisan test
+
+  publish-deploy-branch:
+    name: Publish deploy branch
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, dom, fileinfo, mysql, bcmath
+          coverage: none
+
+      # The cPanel server's firewall silently drops inbound connections from
+      # GitHub Actions' cloud IPs, so we can't SSH or rsync into it from here
+      # (confirmed: "dial tcp: i/o timeout" against both port 22 and 2222,
+      # with a valid key and correct host). Instead, this job builds a
+      # self-contained, deployable snapshot (app code + vendor/, since the
+      # server has no Composer either) and force-pushes it to a `deploy`
+      # branch. The server pulls that branch itself via cron -- an outbound
+      # connection it initiates, which the firewall doesn't block.
+      - name: Install production dependencies
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+      - name: Publish deploy branch
+        run: |
+          # Some composer packages get resolved from VCS source (retaining a
+          # nested .git dir) rather than a dist zip. Git would treat those as
+          # submodule links and silently drop their contents from the commit,
+          # shipping a broken vendor/ -- strip them so everything is tracked
+          # as plain files.
+          find vendor -mindepth 1 -name ".git" -type d -exec rm -rf {} +
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan cpanel-deploy
+          git rm -rf --cached . > /dev/null
+          git add -A
+          git add -f vendor
+          git commit -m "Deploy ${{ github.sha }}"
+          git push --force origin cpanel-deploy
