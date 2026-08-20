@@ -7,14 +7,18 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClassArmController;
 use App\Http\Controllers\Api\ClassLevelController;
 use App\Http\Controllers\Api\EnrollmentController;
+use App\Http\Controllers\Api\FeeStructureController;
 use App\Http\Controllers\Api\GradingScaleController;
 use App\Http\Controllers\Api\GuardianController;
+use App\Http\Controllers\Api\InvoiceController;
+use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ResultController;
 use App\Http\Controllers\Api\SchoolController;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\SubjectController;
 use App\Http\Controllers\Api\TermController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::post('login', [AuthController::class, 'login'])->middleware('throttle:6,1');
@@ -22,12 +26,12 @@ Route::post('login', [AuthController::class, 'login'])->middleware('throttle:6,1
 Route::middleware(['auth:sanctum', 'permissions.team'])->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
 
-    Route::get('/user', fn (\Illuminate\Http\Request $request) => [
-        'id'        => $request->user()->id,
-        'name'      => $request->user()->name,
-        'email'     => $request->user()->email,
+    Route::get('/user', fn (Request $request) => [
+        'id' => $request->user()->id,
+        'name' => $request->user()->name,
+        'email' => $request->user()->email,
         'school_id' => $request->user()->school_id,
-        'roles'     => $request->user()->getRoleNames(),
+        'roles' => $request->user()->getRoleNames(),
     ]);
 
     Route::apiResource('students', StudentController::class);
@@ -73,4 +77,15 @@ Route::middleware(['auth:sanctum', 'permissions.team'])->group(function () {
     Route::put('attendances/{attendance}', [AttendanceController::class, 'update'])->name('attendances.update');
     Route::patch('attendances/{attendance}', [AttendanceController::class, 'update']);
     Route::delete('attendances/{attendance}', [AttendanceController::class, 'destroy'])->name('attendances.destroy');
+
+    Route::apiResource('fee-structures', FeeStructureController::class);
+    Route::put('fee-structures/{fee_structure}/items', [FeeStructureController::class, 'syncItems'])->name('fee-structures.items.sync');
+    Route::post('fee-structures/{fee_structure}/publish', [FeeStructureController::class, 'publish'])->name('fee-structures.publish');
+
+    // No store route -- invoices are only ever generated via fee-structures/{fee_structure}/publish.
+    Route::apiResource('invoices', InvoiceController::class)->except(['store']);
+
+    // No update/destroy routes -- payments are append-only; correct a mistake via reverse.
+    Route::apiResource('payments', PaymentController::class)->only(['index', 'show', 'store']);
+    Route::post('payments/{payment}/reverse', [PaymentController::class, 'reverse'])->name('payments.reverse');
 });

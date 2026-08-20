@@ -38,6 +38,11 @@ class Staff extends Model
         return $this->hasMany(Attendance::class, 'recorded_by');
     }
 
+    public function recordedPayments(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'recorded_by');
+    }
+
     public function getFullNameAttribute(): string
     {
         return implode(' ', array_filter([$this->first_name, $this->middle_name, $this->last_name]));

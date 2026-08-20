@@ -26,4 +26,9 @@ class ClassLevel extends Model
     {
         return $this->hasMany(GradingScale::class);
     }
+
+    public function feeStructures(): HasMany
+    {
+        return $this->hasMany(FeeStructure::class);
+    }
 }
