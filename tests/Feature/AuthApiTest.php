@@ -18,9 +18,9 @@ class AuthApiTest extends TestCase
     {
         return User::create(array_merge([
             'school_id' => $school->id,
-            'name'      => 'Jane Admin',
-            'email'     => 'jane@example.com',
-            'password'  => Hash::make('correct-password'),
+            'name' => 'Jane Admin',
+            'email' => 'jane@example.com',
+            'password' => Hash::make('correct-password'),
         ], $overrides));
     }
 
@@ -33,7 +33,7 @@ class AuthApiTest extends TestCase
         $user->assignRole(Role::firstOrCreate(['name' => 'school_admin', 'guard_name' => 'web', 'school_id' => $school->id]));
 
         $response = $this->postJson('/api/login', [
-            'email'    => 'jane@example.com',
+            'email' => 'jane@example.com',
             'password' => 'correct-password',
         ]);
 
@@ -49,7 +49,7 @@ class AuthApiTest extends TestCase
         $this->makeUser($school);
 
         $this->postJson('/api/login', [
-            'email'    => 'jane@example.com',
+            'email' => 'jane@example.com',
             'password' => 'wrong-password',
         ])->assertStatus(422);
     }
@@ -57,7 +57,7 @@ class AuthApiTest extends TestCase
     public function test_login_fails_for_unknown_email(): void
     {
         $this->postJson('/api/login', [
-            'email'    => 'nobody@example.com',
+            'email' => 'nobody@example.com',
             'password' => 'whatever',
         ])->assertStatus(422);
     }
@@ -68,7 +68,7 @@ class AuthApiTest extends TestCase
         $this->makeUser($school, ['is_active' => false]);
 
         $this->postJson('/api/login', [
-            'email'    => 'jane@example.com',
+            'email' => 'jane@example.com',
             'password' => 'correct-password',
         ])->assertStatus(422);
     }
@@ -79,12 +79,55 @@ class AuthApiTest extends TestCase
         $this->makeUser($school);
 
         $login = $this->postJson('/api/login', [
-            'email'    => 'jane@example.com',
+            'email' => 'jane@example.com',
             'password' => 'correct-password',
         ]);
         $token = $login->json('token');
 
         $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/user')
+            ->assertOk()
+            ->assertJsonPath('email', 'jane@example.com');
+    }
+
+    /**
+     * The Next.js frontend never sends an Authorization header -- it relies
+     * entirely on Sanctum's SPA cookie flow (CSRF cookie, then a
+     * same-origin-looking login, then subsequent requests authenticated by
+     * the session cookie alone). Drives that exact sequence rather than
+     * using actingAs(), since the whole point is proving the cookie/CSRF/
+     * CORS wiring (config/cors.php, SANCTUM_STATEFUL_DOMAINS, and
+     * AuthController's hasSession() branch) actually produces a working
+     * session -- actingAs() would bypass all of that and prove nothing.
+     */
+    public function test_a_browser_client_can_authenticate_via_session_cookie_alone(): void
+    {
+        config(['sanctum.stateful' => ['localhost:3000']]);
+
+        $school = School::create(['name' => 'School A', 'code' => 'school-a']);
+        $this->makeUser($school);
+
+        $csrf = $this->withHeader('Origin', 'http://localhost:3000')->get('/sanctum/csrf-cookie');
+        $csrf->assertNoContent();
+
+        $xsrfCookie = collect($csrf->headers->getCookies())->first(fn ($cookie) => $cookie->getName() === 'XSRF-TOKEN');
+        $this->assertNotNull($xsrfCookie, 'Expected /sanctum/csrf-cookie to set an XSRF-TOKEN cookie.');
+
+        $login = $this->withHeader('Origin', 'http://localhost:3000')
+            ->withCookie('XSRF-TOKEN', $xsrfCookie->getValue())
+            ->withHeader('X-XSRF-TOKEN', urldecode($xsrfCookie->getValue()))
+            ->postJson('/api/login', ['email' => 'jane@example.com', 'password' => 'correct-password']);
+
+        $login->assertOk();
+
+        $sessionCookie = collect($login->headers->getCookies())
+            ->first(fn ($cookie) => str_contains($cookie->getName(), 'session'));
+        $this->assertNotNull($sessionCookie, 'Expected login to set a session cookie for a stateful-origin request.');
+
+        // No Authorization header anywhere below -- the session cookie alone
+        // has to carry authentication, exactly like the real frontend.
+        $this->withHeader('Origin', 'http://localhost:3000')
+            ->withCookie($sessionCookie->getName(), $sessionCookie->getValue())
             ->getJson('/api/user')
             ->assertOk()
             ->assertJsonPath('email', 'jane@example.com');

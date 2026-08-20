@@ -21,9 +21,9 @@ class DatabaseSeeder extends Seeder
         $school = School::firstOrCreate(
             ['code' => 'demo'],
             [
-                'name'      => 'Folad Demo School',
-                'email'     => 'info@demo.folad.test',
-                'currency'  => 'NGN',
+                'name' => 'Folad Demo School',
+                'email' => 'info@demo.folad.test',
+                'currency' => 'NGN',
                 'is_active' => true,
             ],
         );
@@ -34,8 +34,8 @@ class DatabaseSeeder extends Seeder
             ['email' => 'superadmin@folad.test'],
             [
                 'school_id' => null,
-                'name'      => 'Super Admin',
-                'password'  => 'password',
+                'name' => 'Super Admin',
+                'password' => 'password',
             ],
         );
 
@@ -43,8 +43,8 @@ class DatabaseSeeder extends Seeder
             ['email' => 'admin@demo.folad.test'],
             [
                 'school_id' => $school->id,
-                'name'      => 'Demo School Admin',
-                'password'  => 'password',
+                'name' => 'Demo School Admin',
+                'password' => 'password',
             ],
         );
 
@@ -59,5 +59,7 @@ class DatabaseSeeder extends Seeder
         $this->command?->info('Seeded demo school (code: demo) with:');
         $this->command?->info('  superadmin@folad.test / password  (super_admin, no school)');
         $this->command?->info('  admin@demo.folad.test / password  (school_admin, Folad Demo School)');
+
+        $this->call(DemoDataSeeder::class);
     }
 }
