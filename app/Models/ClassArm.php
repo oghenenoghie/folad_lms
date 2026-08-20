@@ -15,13 +15,34 @@ class ClassArm extends Model
 
     protected $casts = ['capacity' => 'integer'];
 
-    public function classLevel(): BelongsTo { return $this->belongsTo(ClassLevel::class); }
-    public function formTeacher(): BelongsTo { return $this->belongsTo(Staff::class, 'form_teacher_id'); }
-    public function enrollments(): HasMany   { return $this->hasMany(Enrollment::class); }
+    public function classLevel(): BelongsTo
+    {
+        return $this->belongsTo(ClassLevel::class);
+    }
+
+    public function formTeacher(): BelongsTo
+    {
+        return $this->belongsTo(Staff::class, 'form_teacher_id');
+    }
+
+    public function enrollments(): HasMany
+    {
+        return $this->hasMany(Enrollment::class);
+    }
+
+    public function timetableEntries(): HasMany
+    {
+        return $this->hasMany(TimetableEntry::class);
+    }
+
+    public function announcements(): HasMany
+    {
+        return $this->hasMany(Announcement::class);
+    }
 
     /** "JSS 1A" — level.name + arm.name, no separator (per skill spec). */
     public function getFullNameAttribute(): string
     {
-        return trim(($this->classLevel?->name ?? '') . $this->name);
+        return trim(($this->classLevel?->name ?? '').$this->name);
     }
 }

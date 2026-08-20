@@ -15,9 +15,9 @@ class Term extends Model
 
     protected $casts = [
         'start_date' => 'date',
-        'end_date'   => 'date',
+        'end_date' => 'date',
         'is_current' => 'boolean',
-        'sequence'   => 'integer',
+        'sequence' => 'integer',
     ];
 
     public function academicSession(): BelongsTo
@@ -38,5 +38,10 @@ class Term extends Model
     public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function timetableEntries(): HasMany
+    {
+        return $this->hasMany(TimetableEntry::class);
     }
 }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AcademicSessionController;
+use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AssessmentComponentController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
@@ -12,12 +13,14 @@ use App\Http\Controllers\Api\GradingScaleController;
 use App\Http\Controllers\Api\GuardianController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\PeriodController;
 use App\Http\Controllers\Api\ResultController;
 use App\Http\Controllers\Api\SchoolController;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\SubjectController;
 use App\Http\Controllers\Api\TermController;
+use App\Http\Controllers\Api\TimetableEntryController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -88,4 +91,8 @@ Route::middleware(['auth:sanctum', 'permissions.team'])->group(function () {
     // No update/destroy routes -- payments are append-only; correct a mistake via reverse.
     Route::apiResource('payments', PaymentController::class)->only(['index', 'show', 'store']);
     Route::post('payments/{payment}/reverse', [PaymentController::class, 'reverse'])->name('payments.reverse');
+
+    Route::apiResource('periods', PeriodController::class);
+    Route::apiResource('timetable-entries', TimetableEntryController::class);
+    Route::apiResource('announcements', AnnouncementController::class);
 });
