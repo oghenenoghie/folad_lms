@@ -30,11 +30,13 @@ Route::middleware(['auth:sanctum', 'permissions.team'])->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
 
     Route::get('/user', fn (Request $request) => [
-        'id' => $request->user()->id,
-        'name' => $request->user()->name,
-        'email' => $request->user()->email,
-        'school_id' => $request->user()->school_id,
-        'roles' => $request->user()->getRoleNames(),
+        'data' => [
+            'id' => $request->user()->id,
+            'name' => $request->user()->name,
+            'email' => $request->user()->email,
+            'school_id' => $request->user()->school_id,
+            'roles' => $request->user()->getRoleNames(),
+        ],
     ]);
 
     Route::apiResource('students', StudentController::class);
