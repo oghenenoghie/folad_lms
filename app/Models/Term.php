@@ -29,4 +29,14 @@ class Term extends Model
     {
         return $this->hasMany(AssessmentComponent::class);
     }
+
+    public function feeStructures(): HasMany
+    {
+        return $this->hasMany(FeeStructure::class);
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
 }

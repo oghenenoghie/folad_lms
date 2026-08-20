@@ -31,6 +31,9 @@ class School extends Model
     public function assessmentComponents(): HasMany { return $this->hasMany(AssessmentComponent::class); }
     public function results(): HasMany          { return $this->hasMany(Result::class); }
     public function attendances(): HasMany      { return $this->hasMany(Attendance::class); }
+    public function feeStructures(): HasMany    { return $this->hasMany(FeeStructure::class); }
+    public function invoices(): HasMany         { return $this->hasMany(Invoice::class); }
+    public function payments(): HasMany         { return $this->hasMany(Payment::class); }
 
     public function currentSession(): ?AcademicSession
     {
