@@ -87,7 +87,7 @@ class AuthApiTest extends TestCase
         $this->withHeader('Authorization', "Bearer {$token}")
             ->getJson('/api/user')
             ->assertOk()
-            ->assertJsonPath('email', 'jane@example.com');
+            ->assertJsonPath('data.email', 'jane@example.com');
     }
 
     /**
@@ -130,7 +130,7 @@ class AuthApiTest extends TestCase
             ->withCookie($sessionCookie->getName(), $sessionCookie->getValue())
             ->getJson('/api/user')
             ->assertOk()
-            ->assertJsonPath('email', 'jane@example.com');
+            ->assertJsonPath('data.email', 'jane@example.com');
     }
 
     public function test_logout_revokes_the_token(): void
