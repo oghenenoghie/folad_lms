@@ -1,6 +1,6 @@
 # Folad LMS
 
-A **multi-tenant school management platform** for Nigerian schools. This repository is the **Laravel 13 REST API** backend (MySQL, deployed to cPanel); the client is a separate **Next.js (App Router)** app on Vercel that talks to this API over Laravel Sanctum.
+A **multi-tenant school management platform** for Nigerian schools. This repository is the **Laravel 13 REST API** backend (Postgres on [Neon](https://neon.tech), deployed to [Railway](https://railway.com)); the client is a separate **Next.js (App Router)** app on Vercel that talks to this API over Laravel Sanctum.
 
 Built as a product rather than a single-institution deployment — every core table carries a `school_id`, so one API can serve many schools with isolation enforced at the application layer.
 
@@ -17,12 +17,12 @@ Core skeleton, auth, and enrolment are done, and so is assessment: schools, acad
 | Layer            | Choice                                                                      |
 | ---------------- | --------------------------------------------------------------------------- |
 | API              | Laravel 13 (PHP 8.3+), REST, Sanctum auth                                   |
-| Database         | MySQL 8 (cPanel)                                                            |
+| Database         | Postgres 18 (Neon, serverless)                                              |
 | Roles            | `spatie/laravel-permission`, with **teams = `school_id`** for per-school scoping |
 | Frontend         | Next.js App Router + TypeScript + Tailwind + shadcn/ui (separate repo)      |
-| API deploy       | GitHub Actions (test + build) → pull-based sync to cPanel (see [Deployment](#deployment)) |
+| API deploy       | Railway (`web`/`queue`/`cron` services, GitHub-integration deploy); CI via GitHub Actions (see [Deployment](#deployment)) |
 | Frontend deploy  | Vercel (push-to-deploy)                                                     |
-| Media            | Cloudinary or cPanel storage + `storage:link`                              |
+| Media            | Cloudinary or S3-compatible storage + `storage:link`                       |
 
 **Auth topology:** API at `api.<domain>`, app at `app.<domain>` on a shared apex so Sanctum stateful cookies work (`SANCTUM_STATEFUL_DOMAINS` + `SESSION_DOMAIN=.<domain>`). If a shared apex isn't available, fall back to bearer tokens.
 
@@ -30,7 +30,7 @@ Core skeleton, auth, and enrolment are done, and so is assessment: schools, acad
 
 ### Multi-tenancy
 
-Every core table carries `school_id`. MySQL has no row-level security, so isolation is enforced in the application via an Eloquent **global scope** plus a `BelongsToSchool` trait. `super_admin` is the only role that bypasses the scope, and it does so explicitly. A tenant-scoped query that forgets `school_id` is treated as a data-leak bug, not a style issue.
+Every core table carries `school_id`, isolated in the application via an Eloquent **global scope** plus a `BelongsToSchool` trait. Postgres does support row-level security, but the app doesn't rely on it — app-layer scoping is the enforced boundary. `super_admin` is the only role that bypasses the scope, and it does so explicitly. A tenant-scoped query that forgets `school_id` is treated as a data-leak bug, not a style issue.
 
 ### Roles
 
@@ -79,7 +79,7 @@ Class structure is two-tier, matching Nigerian schools: a `class_level` ("JSS 1"
 composer install
 cp .env.example .env
 php artisan key:generate
-touch database/database.sqlite   # or point DB_* in .env at a local MySQL instance
+touch database/database.sqlite   # or point DB_* in .env at a local Postgres instance
 php artisan migrate
 php artisan serve
 ```
@@ -97,51 +97,36 @@ npm run dev      # or: npm run build
 php artisan test        # or: ./vendor/bin/phpunit
 ```
 
-Tests gate deployment — the CI `test` job must pass before the deploy-branch publish step runs.
+CI (`.github/workflows/ci.yml`) runs this on every push/PR to `main`, independent of Railway's own deploy.
 
 ## Deployment
 
-The cPanel host's firewall silently drops inbound SSH connections from GitHub Actions' cloud IPs (confirmed: connections to both port 22 and a custom port time out even with a valid key), so deployment can't be push-based. Instead it's **pull-based**: the server fetches from GitHub itself over an outbound connection, which the firewall doesn't touch.
+Production runs on **Railway** with a **Neon** Postgres database, as three services built from this repo:
 
-Pushes to `main` run tests, then (`.github/workflows/deploy-api.yml`, `publish-deploy-branch` job) build `vendor/` in CI — the server has no Composer either — and force-push a self-contained snapshot (app code + `vendor/`, no history) to a `cpanel-deploy` branch. A cron job on the server pulls that branch and runs the Laravel deploy steps locally.
+| Service | Start command | Purpose |
+|---|---|---|
+| `web` | Railway default (php-fpm + Caddy, auto-detected) | Serves the API |
+| `queue` | `bash railway/run-worker.sh` | Queue worker (`QUEUE_CONNECTION=database`), runs continuously |
+| `cron` | `bash railway/run-cron.sh` | Loops `php artisan schedule:run` every minute |
 
-**One-time server setup** (via SSH, from a connection that isn't firewalled — i.e. your own):
+All three share the same source and environment variables. The `web` service runs `railway/init-app.sh` as its **pre-deploy command** on every deploy: `migrate --force`, then `optimize:clear` and re-`cache` config/events/routes/views.
 
-> **Confirm the real document root first.** `foladschool.com.ng` is the account's primary domain, so its document root is `public_html/` directly — **not** `public_html/foladschool.com.ng/`. A checkout at `public_html/foladschool.com.ng/folad_lms` looks plausible but isn't served by anything; it's happened before (deploys silently landing there while the live site kept running old code). Verify in cPanel → Domains → Document Root, or just check which path shows up in `storage/logs/laravel.log` stack traces from an actual HTTP request.
+Required environment variables (set on each Railway service, not committed):
 
-```bash
-cd /home2/headpock/public_html/folad_lms   # wherever the app lives
+| Variable | Value |
+|---|---|
+| `APP_KEY` | Output of `php artisan key:generate --show` |
+| `APP_ENV` | `production` |
+| `DB_CONNECTION` | `pgsql` |
+| `DB_URL` | Neon connection string (`postgresql://...?sslmode=require`) |
+| `QUEUE_CONNECTION` | `database` |
+| `LOG_CHANNEL` | `stderr` (Railway's filesystem is ephemeral — logs must go to stderr to show up in `railway logs`) |
+| `LOG_STDERR_FORMATTER` | `\Monolog\Formatter\JsonFormatter` |
+| `SANCTUM_STATEFUL_DOMAINS`, `SESSION_DOMAIN`, `FRONTEND_URLS` | Same conventions as local, pointed at the production frontend domain |
 
-# Point the existing clone at the deploy branch instead of main
-git fetch origin cpanel-deploy
-git checkout -B cpanel-deploy origin/cpanel-deploy
+Railway's own GitHub integration builds and deploys `main` directly — `.github/workflows/ci.yml` only runs tests and does not deploy.
 
-cp .env.example .env   # if not already present; then fill in real DB_* values, APP_KEY, etc.
-php artisan key:generate
-php artisan storage:link
-```
-
-Then add a cron job (cPanel → Cron Jobs) that keeps it in sync:
-
-```
-*/5 * * * * (cd /home2/headpock/public_html/folad_lms && git fetch origin cpanel-deploy -q && git reset --hard origin/cpanel-deploy -q && php artisan migrate --force && php artisan config:cache && php artisan route:cache && php artisan view:cache && php artisan queue:restart) >> /home2/headpock/public_html/folad_lms/storage/logs/deploy.log 2>&1
-```
-
-Two details that matter here and have bitten this deploy before:
-
-- **Wrap the whole chain in `( ... )` before the `>>` redirect.** Written as a flat `&&` chain, the redirect only applies to the *last* command — every earlier step (the `git fetch`/`reset`, `migrate`) can fail silently with nothing in the log. Use an absolute path for the log file too, so a failed `cd` doesn't strand the redirect somewhere unexpected.
-- **Verify `which php` in cron's environment matches your interactive shell's.** cPanel's cron runs with a minimal `PATH` that may not include the same `ea-phpXX` override your SSH session's shell profile sets up — if cron resolves `php` to an older version than the app's Composer platform requirement, every step fails with a `Composer detected issues in your platform` fatal error. If in doubt, replace the three bare `php` calls above with the absolute binary path (e.g. `/opt/cpanel/ea-php83/root/usr/bin/php`).
-
-`git reset --hard` is safe here because the `cpanel-deploy` branch is a generated artifact (force-pushed fresh each time, not a real history) — the server's working copy is meant to exactly mirror it. `.env` isn't part of that branch (it's gitignored), so it survives the reset untouched.
-
-Because shared cPanel hosting has no Supervisor, the queue worker also runs via cron rather than a long-lived process:
-
-```
-* * * * * cd /home2/headpock/public_html/folad_lms && php artisan schedule:run >> /dev/null 2>&1
-* * * * * cd /home2/headpock/public_html/folad_lms && php artisan queue:work --stop-when-empty --max-time=55
-```
-
-**Backups:** the `migrate --force` step in the sync cron runs against a live database with no separate dump step today — schedule an independent daily `mysqldump` off-server before relying on this in production.
+**Neon:** create a branch per PR for a disposable preview database (Neon's GitHub integration can automate this), and keep a `production` branch as the source of truth. Neon handles backups/point-in-time recovery, so there's no separate dump step to maintain.
 
 ## Conventions
 
