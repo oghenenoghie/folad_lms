@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 // Tenant root. Every tenant-scoped table carries school_id and is isolated
-// at the application layer (global scope + BelongsToSchool trait) — MySQL has no RLS.
+// at the application layer (global scope + BelongsToSchool trait), not via Postgres RLS.
 return new class extends Migration
 {
     public function up(): void

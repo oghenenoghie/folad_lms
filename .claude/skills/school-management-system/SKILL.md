@@ -1,30 +1,30 @@
 ---
 name: school-management-system
-description: 'Project, domain, and engineering reference for a multi-tenant school management system for Nigerian schools, built as a Laravel 13 REST API (MySQL, cPanel over SSH) with a Next.js frontend on Vercel, in the IFS LMS mold. Use for any work on this system — modelling schools, academic sessions and terms, students, guardians, staff, class levels and arms, subjects, enrolment, results and grading, attendance, or fees and invoicing; building any API endpoint, Eloquent model, migration, resource, or policy; applying tenant isolation, roles, or the money and effective-dating conventions; wiring the GitHub Actions to cPanel deploy or Sanctum cross-subdomain auth. Trigger even without a project name — Nigerian JSS/SSS class structure, admission numbers, term-based results, form teachers, school fees in kobo, or student/guardian/enrolment modelling all qualify. Always confirm the multi-tenancy and naming decisions before scaffolding, and never store money as anything but integer minor units.'
+description: 'Project, domain, and engineering reference for a multi-tenant school management system for Nigerian schools, built as a Laravel 13 REST API (Postgres on Neon, deployed to Railway) with a Next.js frontend on Vercel, in the IFS LMS mold. Use for any work on this system — modelling schools, academic sessions and terms, students, guardians, staff, class levels and arms, subjects, enrolment, results and grading, attendance, or fees and invoicing; building any API endpoint, Eloquent model, migration, resource, or policy; applying tenant isolation, roles, or the money and effective-dating conventions; wiring the GitHub Actions CI, Railway deploy, or Sanctum cross-subdomain auth. Trigger even without a project name — Nigerian JSS/SSS class structure, admission numbers, term-based results, form teachers, school fees in kobo, or student/guardian/enrolment modelling all qualify. Always confirm the multi-tenancy and naming decisions before scaffolding, and never store money as anything but integer minor units.'
 ---
 
 # School Management System
 
-A **multi-tenant school management platform** for Nigerian schools. Backend is a **Laravel 13 REST API** on MySQL, deployed to **cPanel over SSH** via GitHub Actions; frontend is **Next.js (App Router)** on Vercel, talking to the API over Sanctum. Same delivery shape as the IFS LMS, but built as a product (tenant-ready) rather than a single-institution deployment.
+A **multi-tenant school management platform** for Nigerian schools. Backend is a **Laravel 13 REST API** on **Postgres (Neon)**, deployed to **Railway** (three services from one repo: app, queue worker, scheduler); frontend is **Next.js (App Router)** on Vercel, talking to the API over Sanctum. Same delivery shape as the IFS LMS, but built as a product (tenant-ready) rather than a single-institution deployment.
 
 Organising idea: **the academic calendar is the spine.** Almost everything that matters — enrolment, results, attendance, fees — is scoped to a `school` → `academic_session` → `term`. Get that hierarchy right and the rest hangs off it cleanly.
 
 ## Read this first — two open decisions
 
 1. **Codename is unset.** This skill is written brand-neutral. Do not invent a name in code or table names; the domain tables (`students`, `class_arms`, etc.) don't depend on it. Confirm the product name with Patrick before creating repos, package paths, or public-facing copy. (Note: this is a *standalone Laravel project*, distinct from the `business-platform` Supabase monorepo and its separate school app — don't conflate them.)
-2. **Multi-tenancy is ON by default.** Every core table carries `school_id` and is isolated at the **application layer** (Eloquent global scope + `BelongsToSchool` trait), because MySQL has no RLS. If this is confirmed single-school-forever, tenancy can be stripped — but retrofitting it later is painful, so default to keeping it.
+2. **Multi-tenancy is ON by default.** Every core table carries `school_id` and is isolated at the **application layer** (Eloquent global scope + `BelongsToSchool` trait). Postgres does support row-level security, but the app doesn't rely on it — app-layer scoping is the enforced boundary. If this is confirmed single-school-forever, tenancy can be stripped — but retrofitting it later is painful, so default to keeping it.
 
 ## Stack
 
 | Layer | Choice |
 |---|---|
 | API | Laravel 13 (PHP 8.3+), REST, Sanctum auth |
-| DB | MySQL 8 (cPanel) |
+| DB | Postgres 18 (Neon, serverless) |
 | Roles | `spatie/laravel-permission` with **teams = school_id** for per-school scoping |
 | Frontend | Next.js App Router, TypeScript, Tailwind, shadcn/ui (see `nextjs-visual` skill) |
-| API deploy | GitHub Actions → SSH → cPanel (`deploy-api.yml`) |
+| API deploy | Railway (app + worker + scheduler services, GitHub-integration deploy); CI via GitHub Actions (`ci.yml`) |
 | Frontend deploy | Vercel (push-to-deploy) |
-| Media | Cloudinary or cPanel storage + `storage:link` |
+| Media | Cloudinary or S3-compatible storage + `storage:link` |
 
 Domains: API at `api.<domain>`, app at `app.<domain>` — same apex so Sanctum stateful cookies work. `SANCTUM_STATEFUL_DOMAINS` + `SESSION_DOMAIN=.<domain>`. If a shared apex isn't possible, fall back to bearer tokens and note the security trade-off.
 
@@ -90,10 +90,12 @@ Documented here so the model is understood end-to-end, but shipped in follow-up 
 
 ## Deployment & operations
 
-- **API → cPanel** via `deploy-api.yml` (test job gates deploy; SSH script does `down → backup → pull → composer → migrate --force → cache → queue:restart → up`). `.env` lives on the server, never committed. cPanel SSH is often on a non-standard port.
-- **Scheduler:** one cron — `* * * * * cd <path> && php artisan schedule:run >> /dev/null 2>&1`.
-- **Queue reality (critical):** on shared cPanel with no root, there's no Supervisor. Run workers via cron: `* * * * * php artisan queue:work --stop-when-empty --max-time=55`. This means report-card generation, bulk imports, and guardian SMS/email run on a ~1-minute cadence, not instantly — design the UX around "processing, you'll be notified." On a VPS with root, use Supervisor + Redis for real-time workers.
-- **Backups:** the deploy job `mysqldump`s before every migration; also schedule an independent daily dump off-server.
+- **API → Railway**, three services built from this repo: `app` (php-fpm + Caddy, auto-detected), `worker` (`bash railway/run-worker.sh`), `scheduler` (`bash railway/run-cron.sh`). Railway's GitHub integration deploys `main` directly; `.github/workflows/ci.yml` only runs tests and does not deploy. `.env` values live as Railway service variables, never committed.
+- **Pre-deploy:** `railway/init-app.sh` runs on the `app` service before each deploy — `migrate --force`, then re-cache config/events/routes/views.
+- **Scheduler:** the `scheduler` service loops `php artisan schedule:run` every 60s (no cron infra needed — Railway keeps the service alive).
+- **Queue:** the `worker` service runs `php artisan queue:work` continuously (`QUEUE_CONNECTION=database`), so jobs process in near real-time rather than on a cron cadence.
+- **DB:** Neon Postgres. Use a Neon branch per environment/PR for disposable preview databases; keep `production` as the branch Railway points at (`DB_URL` / `DB_CONNECTION=pgsql`). Neon handles backups/PITR — no separate dump step needed.
+- **Logging:** set `LOG_CHANNEL=stderr` (Railway's filesystem is ephemeral) so logs show up in `railway logs`.
 
 ## Guardrails for Claude
 
@@ -102,7 +104,7 @@ Documented here so the model is understood end-to-end, but shipped in follow-up 
 - **Don't denormalise current class/position/balance** onto parent rows to "save a join" without asking — it creates silent correctness drift across terms.
 - **Confirm the two open decisions** (name, tenancy) before scaffolding anything structural.
 - **Student data is sensitive PII** (minors). Keep auth strict, log access to results/records, and don't expose student lists across tenants in any endpoint.
-- This is not the monorepo's school app — don't import Supabase/`packages/core` patterns; this is Laravel + MySQL with app-layer isolation.
+- This is not the monorepo's school app — don't import Supabase/`packages/core` patterns; this is Laravel + Postgres with app-layer isolation.
 
 ## Roadmap shape
 
